@@ -40,15 +40,21 @@
     .footerWrap{max-width:980px;margin:0 auto;padding:10px 16px;display:flex;justify-content:space-between;color:var(--muted)}
 
     /* Plan chooser */
-    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px}
-    .modal{background:#0e1a2a;border:1px solid rgba(255,255,255,.1);border-radius:16px;max-width:900px;width:100%;padding:16px}
-    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-    .card{background:#122033;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:20px;z-index:9999}
+    .modal{position:relative;background:#0e1a2a;border:1px solid rgba(255,255,255,.1);border-radius:16px;max-width:900px;width:100%;padding:16px;max-height:85vh;overflow:auto;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px}
+    .card{background:#122033;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;transition:border-color .2s, box-shadow .2s}
     .card h3{margin:0}
     .row{display:flex;gap:8px;flex-wrap:wrap}
-    .btn{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,.2);padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600}
+    .btn{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,.2);padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600}.btn:hover{border-color:var(--accent)}
     .btn:hover{border-color:var(--accent)}
-    @media(max-width:680px){.totals{grid-template-columns:1fr}.settings{grid-template-columns:1fr}.weekHead{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
+    @media(max-width:680px){.totals{grid-template-columns:1fr}.settings{grid-template-columns:1fr}.weekHead{grid-template-columns:1fr}.grid{grid-template-columns:1fr}} 
+/* highlight and overlay tweaks */
+.card.selected{border-color:var(--accent); box-shadow:0 0 0 2px rgba(74,163,255,.35) inset}
+.badge{border:1px solid rgba(255,255,255,.2); border-radius:999px; padding:2px 8px; font-size:.8rem; color:var(--muted)}
+.modal .topbar{position:sticky; top:0; background:linear-gradient(180deg, rgba(14,26,42,1), rgba(14,26,42,.8)); padding:6px 0; display:flex; justify-content:space-between; align-items:center; gap:8px; z-index:1}
+.modal .closeX{border:none;background:transparent;color:var(--text);font-size:1.3rem;line-height:1;cursor:pointer; padding:6px 10px}
+body.hasOverlay footer{display:none}.settings{grid-template-columns:1fr}.weekHead{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -105,10 +111,15 @@
 <main id="app"></main>
 <footer><div class="footerWrap"><span id="plannedTotals">Planned total: —</span><span>Data stays on this device.</span></div></footer>
 
-<div id="chooser" class="overlay" style="display:none">
+<div id="chooser" class="overlay">
   <div class="modal">
-    <h2 style="margin:0 0 8px">Choose a plan</h2>
-    <div class="grid" id="planGrid"></div>
+    <div class="topbar">
+      <h2 style="margin:0 8px 0 8px">Choose a plan</h2>
+      <button id="xClose" class="closeX" aria-label="Close">✕</button>
+    </div>
+    <div id="planGrid" class="grid"></div>
+  </div>
+</div>
     <div class="row" style="margin-top:8px; justify-content:flex-end"><button id="closeChooser" class="btn">Close</button></div>
   </div>
 </div>
@@ -183,16 +194,23 @@ document.getElementById('closeChooser').onclick=()=> chooser.style.display='none
 
 function openChooser(first){
   chooser.style.display='flex';
+  document.body.classList.add('hasOverlay');
   planGrid.innerHTML='';
   PRESETS.forEach(p=>{
-    const card=document.createElement('div');card.className='card';
-    card.innerHTML=`<h3>${p.name}</h3><div class='desc'>${p.desc}</div><div class='row'><span class='fact'>${p.freq}× / week</span><span class='fact'>12 weeks</span></div><div class='row'><button class='btn'>Choose</button></div>`;
+    const selected = (state.presetId===p.id);
+    const card=document.createElement('div');card.className='card'+(selected?' selected':'');
+    card.innerHTML=`<div class='row' style='justify-content:space-between;align-items:center'><h3 style="margin:0">${p.name}</h3>${selected?'<span class="badge">Selected</span>':''}</div><div class='desc'>${p.desc}</div><div class='row'><span class='fact'>${p.freq}× / week</span><span class='fact'>12 weeks</span></div><div class='row'><button class='btn'>${selected?'Choose again':'Choose'}</button></div>`;
+    card.querySelector('button').onclick=()=>{ if(state.presetId && !first && state.presetId!==p.id && !confirm('Switching plan will reset your progress. Continue?')) return; applyPreset(p); chooser.style.display='none'; document.body.classList.remove('hasOverlay'); };
+    planGrid.appendChild(card);
+  });
+  document.getElementById('xClose').onclick=()=>{ chooser.style.display='none'; document.body.classList.remove('hasOverlay'); };
+}</h3><div class='desc'>${p.desc}</div><div class='row'><span class='fact'>${p.freq}× / week</span><span class='fact'>12 weeks</span></div><div class='row'><button class='btn'>Choose</button></div>`;
     card.querySelector('button').onclick=()=>{ if(state.presetId && !first && !confirm('Switching plan will reset your progress. Continue?')) return; applyPreset(p); chooser.style.display='none'; };
     planGrid.appendChild(card);
   });
 }
 
-function applyPreset(p){ state.presetId=p.id; state.freq=p.freq; state.sessions={}; state.weeks=p.build(); save(); render(); }
+function applyPreset(p){ state.presetId=p.id; state.freq=p.freq; state.sessions={}; state.weeks=p.build(); save(); render(); }; state.weeks=p.build(); save(); render(); }
 
 function currentPreset(){ return PRESETS.find(p=>p.id===state.presetId); }
 
@@ -273,12 +291,9 @@ function wireSettings(){
 function saveUpdate(){ save(); updateTotals(); }
 
 // Boot
-if(!state.presetId){ // default to medium on first run
-  const def=PRESETS.find(p=>p.id==='medium'); applyPreset(def);
-  // chooser will still open to let them pick something else
-}
 render();
 </script>
 </body>
 </html>
+
 
