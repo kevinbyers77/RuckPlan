@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rucking Plan Tracker</title>
+<style>
+  body { font-family: sans-serif; background: #0b1220; color: #eaf2ff; margin: 0; }
+  header { padding: 1rem; background: #122033; position: sticky; top: 0; }
+  h1 { margin: 0 0 .5rem; }
+  .totals { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .pill { padding: .5rem 1rem; border-radius: 999px; background: #1e2a3f; display: flex; gap: .5rem; align-items: baseline; }
+  .good { color: #90e39a; }
+  .warn { color: #ffd166; }
+  main { padding: 1rem; display: grid; gap: 1rem; }
+  .settings { background: #122033; border-radius: 1rem; padding: 1rem; }
+  label { display: block; margin-top: .5rem; }
+  input[type="number"] { width: 80px; }
+  .week { background: #122033; border-radius: 1rem; overflow: hidden; }
+  .weekHead { padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .desc { color: #7c8aa0; font-size: .9rem; }
+  .facts { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+  .fact { padding: .25rem .75rem; border-radius: 999px; border: 1px dashed rgba(255,255,255,0.2); font-size: .85rem; }
+  .sessions { padding: .5rem 1rem; }
+  .session { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px dashed rgba(255,255,255,0.07); }
+  .session:last-child { border: none; }
+  .done { opacity: .5; }
+  .distInput { display: flex; align-items: center; gap: .25rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rucking Plan Tracker</h1>
+  <div class="totals">
+    <div class="pill good"><span id="doneCount">0/36</span> sessions</div>
+    <div class="pill warn"><span id="totalDist">0.0</span> <span id="totalDistLabel">mi</span></div>
+    <div class="pill"><span id="totalCals">—</span> kcal</div>
+  </div>
+</header>
+<div class="settings">
+  <label>Body Weight <input type="number" id="bodyWeight" placeholder="kg"></label>
+  <label>Distance Unit: 
+    <select id="distUnit">
+      <option value="mi">Miles</option>
+      <option value="km">Kilometers</option>
+    </select>
+  </label>
+  <label>Weight Unit: 
+    <select id="wtUnit">
+      <option value="lbs">Pounds</option>
+      <option value="kg">Kilograms</option>
+    </select>
+  </label>
+</div>
+<main id="app"></main>
+<script>
+const PLAN = [
+  {week:1, title:"Foundation week – focus on form, pacing, and establishing routine", dmin:2, dmax:3, wlbs:15},
+  {week:2, title:"Weight progression week – building strength capacity", dmin:2, dmax:3, wlbs:18},
+  {week:3, title:"Distance progression week – building endurance capacity", dmin:3, dmax:4, wlbs:18},
+  {week:4, title:"Weight progression week – building strength capacity · End of foundation phase – assess comfort and form", dmin:3, dmax:4, wlbs:20},
+  {week:5, title:"Distance progression week – building endurance capacity", dmin:3, dmax:4, wlbs:20},
+  {week:6, title:"Weight progression week – building strength capacity", dmin:3, dmax:4, wlbs:23},
+  {week:7, title:"Distance progression week – building endurance capacity", dmin:4, dmax:5, wlbs:23},
+  {week:8, title:"Weight progression week – building strength capacity · Mid‑program checkpoint – evaluate progress and adjust as needed", dmin:4, dmax:5, wlbs:25},
+  {week:9, title:"Distance progression week – building endurance capacity", dmin:5, dmax:6, wlbs:25},
+  {week:10, title:"Weight progression week – building strength capacity", dmin:5, dmax:6, wlbs:28},
+  {week:11, title:"Distance progression week – building endurance capacity", dmin:5, dmax:6, wlbs:28},
+  {week:12, title:"Peak week – celebrate your achievement and plan your next challenge!", dmin:5, dmax:6, wlbs:30},
+];
+const FREQ = 3;
+let state = JSON.parse(localStorage.getItem('ruck-plan')||'{}');
+function save(){ localStorage.setItem('ruck-plan', JSON.stringify(state)); }
+function defaultDist(w){ return (w.dmin+w.dmax)/2; }
+function render(){
+  let done=0, dist=0, kcal=0;
+  const distUnit = document.getElementById('distUnit').value;
+  const wtUnit = document.getElementById('wtUnit').value;
+  const bodyWeight = parseFloat(document.getElementById('bodyWeight').value) || 0;
+  app.innerHTML = '';
+  PLAN.forEach(w=>{
+    const week = document.createElement('div'); week.className='week';
+    const dmin = distUnit==='mi'?w.dmin:(w.dmin*1.60934).toFixed(1);
+    const dmax = distUnit==='mi'?w.dmax:(w.dmax*1.60934).toFixed(1);
+    const wDisp = wtUnit==='lbs'?w.wlbs:Math.round(w.wlbs*0.45359237);
+    week.innerHTML = `<div class="weekHead"><h2>Week ${w.week}</h2><div class="desc">${w.title}</div><div class="facts"><div class="fact">${dmin}–${dmax} ${distUnit}</div><div class="fact">${wDisp} ${wtUnit}</div><div class="fact">${FREQ}×</div></div></div>`;
+    const sesWrap = document.createElement('div'); sesWrap.className='sessions';
+    for(let i=1;i<=FREQ;i++){
+      const key = `w${w.week}d${i}`;
+      const s = state[key]||{done:false, dist:defaultDist(w)};
+      if(s.done){
+        done++; dist+=s.dist; kcal += (bodyWeight + wDisp) * (distUnit==='mi'?s.dist*1.60934:s.dist);
+      }
+      const row = document.createElement('div'); row.className='session'+(s.done?' done':'');
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=s.done;
+      cb.onchange=()=>{ s.done=cb.checked; state[key]=s; save(); render(); };
+      const distIn = document.createElement('input'); distIn.type='number'; distIn.step='0.1'; distIn.value=s.dist; distIn.oninput=()=>{ s.dist=parseFloat(distIn.value)||0; state[key]=s; save(); render(); };
+      const distLbl = document.createElement('span'); distLbl.textContent=distUnit;
+      const mid = document.createElement('div'); mid.className='distInput'; mid.append(distIn, distLbl);
+      row.append(cb, document.createTextNode(`Session ${i}`), mid);
+      sesWrap.appendChild(row);
+    }
+    week.appendChild(sesWrap);
+    app.appendChild(week);
+  });
+  doneCount.textContent=`${done}/36`;
+  totalDist.textContent=dist.toFixed(1);
+  totalCals.textContent=bodyWeight?Math.round(kcal):'—';
+}
+['distUnit','wtUnit','bodyWeight'].forEach(id=>document.getElementById(id).oninput=render);
+render();
+</script>
+</body>
+</html>
