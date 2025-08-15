@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Rucking Plan Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b1220"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <link rel="apple-touch-icon" href="icon-512.png"/>
+  <style>
+    :root{--bg:#0b1220;--card:#122033;--muted:#7c8aa0;--text:#eaf2ff;--accent:#4aa3ff;--good:#90e39a;--warn:#ffd166}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
+    header{position:sticky;top:0;z-index:5;background:#0e1a2a;border-bottom:1px solid rgba(255,255,255,.08)}
+    .wrap{max-width:980px;margin:0 auto;padding:12px 16px}
+    h1{margin:4px 0 8px;font-size:1.4rem}
+    .totals{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .pill{background:#122033;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:8px 14px;display:flex;gap:8px;align-items:baseline}
+    .pill .big{font-weight:800}
+    .pill.good .big{color:var(--good)} .pill.warn .big{color:var(--warn)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .controls details{background:#122033;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:6px 10px}
+    .settings{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+    .setting{display:flex;flex-direction:column;gap:6px}
+    .setting input[type=number], .setting input[type=time], .setting select{width:100%;padding:8px 10px;border-radius:10px;background:#0e1a2a;border:1px solid rgba(255,255,255,.1);color:var(--text)}
+    .radio{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    main{max-width:980px;margin:10px auto 80px;padding:0 16px;display:grid;gap:10px}
+    .week{background:#122033;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden}
+    .weekHead{display:grid;grid-template-columns:1fr auto;gap:8px;padding:12px;border-bottom:1px solid rgba(255,255,255,.06)}
+    .facts{display:flex;gap:8px;flex-wrap:wrap}
+    .fact{border:1px dashed rgba(255,255,255,.15);border-radius:999px;padding:6px 10px;font-size:.9rem}
+    .desc{color:var(--muted);font-size:.92rem}
+    .sessions{padding:8px 12px}
+    .session{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;padding:8px 6px}
+    .session:not(:last-child){border-bottom:1px dashed rgba(255,255,255,.07)}
+    .session.done{opacity:.5;filter:saturate(.4)}
+    .distInput{display:flex;gap:6px;align-items:center}
+    footer{position:fixed;left:0;right:0;bottom:0;background:linear-gradient(180deg, rgba(11,18,32,.05), rgba(11,18,32,.9))}
+    .footerWrap{max-width:980px;margin:0 auto;padding:10px 16px;display:flex;justify-content:space-between;color:var(--muted)}
+    @media(max-width:680px){.totals{grid-template-columns:1fr}.settings{grid-template-columns:1fr}.weekHead{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>Rucking Plan Tracker</h1>
+      <div class="totals">
+        <div class="pill good"><span class="big" id="doneCount">0/36</span> <small>sessions complete</small></div>
+        <div class="pill warn"><span class="big" id="totalDist">0.0</span> <small id="totalDistLabel">mi completed</small></div>
+        <div class="pill"><span class="big" id="totalCals">—</span> <small>kcal (set your body weight)</small></div>
+      </div>
+      <div class="controls">
+        <details>
+          <summary><strong>Settings</strong></summary>
+          <div class="settings">
+            <div class="setting">
+              <label>Body weight</label>
+              <div class="radio">
+                <input type="number" id="bodyWeight" placeholder="e.g., 80" min="0" step="0.1"/>
+                <label><input type="radio" name="bwUnit" value="kg" checked> kg</label>
+                <label><input type="radio" name="bwUnit" value="lbs"> lbs</label>
+              </div>
+            </div>
+            <div class="setting">
+              <label>Distance units</label>
+              <div class="radio">
+                <label><input type="radio" name="distUnit" value="mi" checked> miles</label>
+                <label><input type="radio" name="distUnit" value="km"> km</label>
+              </div>
+            </div>
+            <div class="setting">
+              <label>Load units</label>
+              <div class="radio">
+                <label><input type="radio" name="wtUnit" value="lbs" checked> lbs</label>
+                <label><input type="radio" name="wtUnit" value="kg"> kg</label>
+              </div>
+            </div>
+            <div class="setting">
+              <label>Calorie model</label>
+              <div class="radio">
+                <input type="number" id="kcalPerKgKm" value="1.0" min="0.5" max="1.5" step="0.05"/>
+                <small>kcal ≈ (body + pack) × km × factor</small>
+              </div>
+            </div>
+            <div class="setting">
+              <label>Daily reminder (in-app)</label>
+              <div class="radio">
+                <input type="time" id="reminderTime" value="07:00">
+                <label><input type="checkbox" class="day" value="1" checked> Mon</label>
+                <label><input type="checkbox" class="day" value="2" checked> Tue</label>
+                <label><input type="checkbox" class="day" value="3" checked> Wed</label>
+                <label><input type="checkbox" class="day" value="4" checked> Thu</label>
+                <label><input type="checkbox" class="day" value="5" checked> Fri</label>
+                <label><input type="checkbox" class="day" value="6"> Sat</label>
+                <label><input type="checkbox" class="day" value="0"> Sun</label>
+              </div>
+              <div class="radio">
+                <button id="enableNoti" type="button">Enable notifications</button>
+                <button id="testNoti" type="button">Test notification</button>
+                <button id="addToCalendar" type="button">Download calendar (.ics)</button>
+              </div>
+              <small>Reminders require the app to be opened at least once; background delivery varies by device. Use the .ics for guaranteed calendar alerts.</small>
+            </div>
+            <div class="setting">
+              <button id="resetBtn" type="button">Reset progress</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </header>
+  <main id="app"></main>
+  <footer><div class="footerWrap"><span id="plannedTotals">Planned total: —</span><span>Install from browser menu. Data is saved locally.</span></div></footer>
+
+<script>
+// Register service worker for offline
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js');
+}
+
+// --- Plan data ---
+const PLAN = [
+  {week:1,  title:"Foundation week – focus on form, pacing, and establishing routine",                                  dmin:2, dmax:3, wlbs:15},
+  {week:2,  title:"Weight progression week – building strength capacity",                                                dmin:2, dmax:3, wlbs:18},
+  {week:3,  title:"Distance progression week – building endurance capacity",                                             dmin:3, dmax:4, wlbs:18},
+  {week:4,  title:"Weight progression week – building strength capacity · End of foundation phase – assess comfort and form", dmin:3, dmax:4, wlbs:20},
+  {week:5,  title:"Distance progression week – building endurance capacity",                                             dmin:3, dmax:4, wlbs:20},
+  {week:6,  title:"Weight progression week – building strength capacity",                                                dmin:3, dmax:4, wlbs:23},
+  {week:7,  title:"Distance progression week – building endurance capacity",                                             dmin:4, dmax:5, wlbs:23},
+  {week:8,  title:"Weight progression week – building strength capacity · Mid‑program checkpoint – evaluate progress and adjust as needed", dmin:4, dmax:5, wlbs:25},
+  {week:9,  title:"Distance progression week – building endurance capacity",                                             dmin:5, dmax:6, wlbs:25},
+  {week:10, title:"Weight progression week – building strength capacity",                                                dmin:5, dmax:6, wlbs:28},
+  {week:11, title:"Distance progression week – building endurance capacity",                                             dmin:5, dmax:6, wlbs:28},
+  {week:12, title:"Peak week – celebrate your achievement and plan your next challenge!",                               dmin:5, dmax:6, wlbs:30},
+];
+const FREQ = 3;
+const STORAGE_KEY = 'ruck-plan-v2';
+
+const mi2km = mi => mi * 1.60934;
+const km2mi = km => km / 1.60934;
+const lbs2kg = lbs => lbs * 0.45359237;
+const round1 = n => Math.round(n * 10) / 10;
+const defaultMid = w => (w.dmin + w.dmax) / 2;
+
+function load() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; } }
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+let state = Object.assign({
+  sessions:{}, bodyWeight:'', bwUnit:'kg', distUnit:'mi', wtUnit:'lbs', kcalPerKgKm:1.0,
+  reminder:{time:'07:00', days:[1,2,3,4,5]}
+}, load());
+
+const app = document.getElementById('app');
+
+function render() {
+  app.innerHTML = '';
+  PLAN.forEach(week => {
+    const card = document.createElement('section'); card.className='week';
+    const head = document.createElement('div'); head.className='weekHead';
+    const title = document.createElement('div');
+    title.innerHTML = "<h2 style='margin:0'>Week "+week.week+"</h2><div class='desc'>"+week.title+"</div>";
+    const facts = document.createElement('div'); facts.className='facts';
+    const [d1,d2] = state.distUnit==='mi' ? [week.dmin, week.dmax] : [round1(mi2km(week.dmin)), round1(mi2km(week.dmax))];
+    facts.innerHTML = "<div class='fact'>Distance: "+d1+"–"+d2+" "+state.distUnit+"</div>"
+      +"<div class='fact'>Weight: "+(state.wtUnit==='lbs'?week.wlbs:Math.round(lbs2kg(week.wlbs)))+" "+state.wtUnit+"</div>"
+      +"<div class='fact'>Frequency: "+FREQ+"×</div>";
+    head.appendChild(title); head.appendChild(facts);
+
+    const ses = document.createElement('div'); ses.className='sessions';
+    for (let i=1;i<=FREQ;i++) {
+      const key = `w${week.week}d${i}`;
+      const row = document.createElement('div'); row.className='session';
+      if (state.sessions[key]?.done) row.classList.add('done');
+
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=!!state.sessions[key]?.done;
+      cb.addEventListener('change', ()=>{ ensure(key); state.sessions[key].done=cb.checked; row.classList.toggle('done', cb.checked); saveUpdate(); });
+
+      const lbl = document.createElement('span'); lbl.innerHTML="<strong>Session "+i+"</strong> <small class='desc'>Pack "+(state.wtUnit==='lbs'?week.wlbs:Math.round(lbs2kg(week.wlbs)))+" "+state.wtUnit+"</small>";
+
+      const distBox = document.createElement('div'); distBox.className='distInput';
+      const input = document.createElement('input'); input.type='number'; input.step='0.1'; input.min='0';
+      input.value = convertMilesToUnit(savedOrDefault(key, week));
+      const unit = document.createElement('small'); unit.textContent = state.distUnit;
+      input.addEventListener('input', ()=>{ ensure(key); const v=parseFloat(input.value); state.sessions[key].distMi = isFinite(v)?convertUnitToMiles(v):null; saveUpdate(); });
+      distBox.append(input, unit);
+
+      const right = document.createElement('div'); const cal = document.createElement('small');
+      const updateCal = ()=>{ cal.textContent = sessionCalories(key, week).label; }; updateCal();
+      right.append(cal);
+
+      row.append(cb, lbl, distBox, right);
+      ses.appendChild(row);
+    }
+
+    card.append(head, ses);
+    app.appendChild(card);
+  });
+
+  updateTotals(); updatePlanned(); wireSettings();
+}
+
+function savedOrDefault(key, week){ return (state.sessions[key]?.distMi != null) ? state.sessions[key].distMi : defaultMid(week); }
+function convertMilesToUnit(mi){ return state.distUnit==='mi' ? round1(mi) : round1(mi2km(mi)); }
+function convertUnitToMiles(v){ return state.distUnit==='mi' ? v : km2mi(v); }
+function ensure(key){ if (!state.sessions[key]) state.sessions[key]={done:false, distMi:null}; }
+
+function currentBodyKg(){ const val=parseFloat(document.getElementById('bodyWeight').value||state.bodyWeight); if(!isFinite(val)||val<=0) return null; return (document.querySelector('input[name="bwUnit"]:checked')?.value||state.bwUnit)==='kg'?val:lbs2kg(val); }
+
+function sessionCalories(key, week){
+  const kg = currentBodyKg(); if(!kg) return {value:0, label:'set weight'};
+  const distKm = mi2km(savedOrDefault(key, week));
+  const packKg = lbs2kg(week.wlbs);
+  const factor = parseFloat(document.getElementById('kcalPerKgKm').value||state.kcalPerKgKm)||1.0;
+  const kcal = (kg + packKg) * distKm * factor;
+  return {value:kcal, label: Math.round(kcal)+' kcal'};
+}
+
+function updateTotals(){
+  let completed=0, distMi=0, kcal=0, have=false;
+  PLAN.forEach(w=>{
+    for(let i=1;i<=FREQ;i++){
+      const key=`w${w.week}d${i}`; const s = state.sessions[key];
+      if(s?.done){ completed++; const dmi=savedOrDefault(key,w); distMi+=dmi; const k=sessionCalories(key,w); if(k.value>0){kcal+=k.value; have=true;} }
+    }
+  });
+  document.getElementById('doneCount').textContent = `${completed}/36`;
+  const du=state.distUnit; const dOut=du==='mi'?distMi:mi2km(distMi);
+  document.getElementById('totalDist').textContent = (Math.round(dOut*10)/10).toFixed(1);
+  document.getElementById('totalDistLabel').textContent = du+" completed";
+  document.getElementById('totalCals').textContent = have?Math.round(kcal):'—';
+}
+
+function updatePlanned(){
+  let totalMi=0, totalKcal=0; const kg=currentBodyKg();
+  const factor=parseFloat(document.getElementById('kcalPerKgKm').value||state.kcalPerKgKm)||1.0;
+  PLAN.forEach(w=>{
+    const per=defaultMid(w); totalMi+=per*FREQ;
+    if(kg){ totalKcal += (kg + lbs2kg(w.wlbs)) * mi2km(per) * factor * FREQ; }
+  });
+  const distOut = state.distUnit==='mi' ? `${round1(totalMi)} mi` : `${round1(mi2km(totalMi))} km`;
+  document.getElementById('plannedTotals').textContent = `Planned distance ≈ ${distOut}` + (kg?` · Planned kcal ≈ ${Math.round(totalKcal)}`:'');
+}
+
+function saveUpdate(){ save(); updateTotals(); }
+
+function wireSettings(){
+  const bw = document.getElementById('bodyWeight');
+  if(state.bodyWeight!=='') bw.value=state.bodyWeight;
+  bw.addEventListener('input', ()=>{ state.bodyWeight=bw.value; saveUpdate(); updatePlanned(); });
+
+  for (const r of document.querySelectorAll('input[name="bwUnit"]')) { r.checked=(r.value===state.bwUnit); r.addEventListener('change', ()=>{ state.bwUnit=r.value; saveUpdate(); updatePlanned(); }); }
+  for (const r of document.querySelectorAll('input[name="distUnit"]')) { r.checked=(r.value===state.distUnit); r.addEventListener('change', ()=>{ state.distUnit=r.value; save(); render(); }); }
+  for (const r of document.querySelectorAll('input[name="wtUnit"]'))   { r.checked=(r.value===state.wtUnit);   r.addEventListener('change', ()=>{ state.wtUnit=r.value; save(); render(); }); }
+
+  const factor=document.getElementById('kcalPerKgKm'); factor.value=state.kcalPerKgKm;
+  factor.addEventListener('input', ()=>{ state.kcalPerKgKm=parseFloat(factor.value)||1.0; saveUpdate(); updatePlanned(); });
+
+  document.getElementById('resetBtn').onclick=()=>{ if(confirm('Reset all progress?')){ state.sessions={}; save(); render(); } };
+
+  // Notifications & calendar
+  document.getElementById('enableNoti').onclick = async ()=>{
+    if (!('Notification' in window)) return alert('Notifications not supported on this device.');
+    if (Notification.permission !== 'granted') {
+      const res = await Notification.requestPermission();
+      if (res !== 'granted') return;
+    }
+    scheduleNextReminder(true);
+  };
+  document.getElementById('testNoti').onclick = ()=> showNotification('Ruck reminder','This is a test notification.');
+  document.getElementById('addToCalendar').onclick = ()=> downloadICS();
+}
+
+function showNotification(title, body){
+  if(Notification.permission!=='granted') return;
+  if(navigator.serviceWorker?.ready){
+    navigator.serviceWorker.ready.then(reg=> reg.showNotification(title,{body}));
+  } else {
+    new Notification(title,{body});
+  }
+}
+
+let reminderTimer=null;
+function scheduleNextReminder(toast){
+  if(reminderTimer) clearTimeout(reminderTimer);
+  const time=document.getElementById('reminderTime').value || '07:00';
+  const days=[...document.querySelectorAll('.day')].filter(e=>e.checked).map(e=>parseInt(e.value,10));
+  const [hh,mm]=time.split(':').map(n=>parseInt(n,10));
+  const now=new Date(); let next=new Date(); next.setHours(hh,mm,0,0);
+  const inDays=dow=>days.includes(dow);
+  if(next<=now || !inDays(now.getDay())){
+    for(let add=1;add<=7;add++){ const cand=new Date(now.getTime()+add*86400000); if(inDays(cand.getDay())){ cand.setHours(hh,mm,0,0); next=cand; break; } }
+  }
+  reminderTimer=setTimeout(()=>{ showNotification('Ruck reminder','Time to ruck!'); scheduleNextReminder(false); }, next-now);
+  if(toast) showNotification('Reminders enabled', 'Next at '+ next.toString());
+}
+
+function downloadICS(){
+  const now=new Date();
+  const fmt = (d)=> d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Ruck Plan//EN'];
+  for(const w of PLAN){
+    for(let i=0;i<FREQ;i++){
+      const start = new Date(now.getTime() + ((w.week-1)*7 + i*2)*86400000);
+      start.setHours(7,0,0,0);
+      const end = new Date(start.getTime() + 60*60*1000);
+      const distMi = defaultMid(w);
+      const desc = `Pack ${w.wlbs} lbs; Distance ${distMi.toFixed(1)} mi`;
+      lines.push('BEGIN:VEVENT',`UID:${crypto.randomUUID()}@ruck`,`DTSTAMP:${fmt(now)}`,`DTSTART:${fmt(start)}`,`DTEND:${fmt(end)}`,`SUMMARY:Ruck – Week ${w.week}`,`DESCRIPTION:${desc}`,'END:VEVENT');
+    }
+  }
+  lines.push('END:VCALENDAR');
+  const blob = new Blob([lines.join('\n')], {type:'text/calendar'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ruck-plan.ics'; a.click();
+}
+
+// boot
+render();
+</script>
+</body>
+</html>
