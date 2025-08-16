@@ -62,21 +62,23 @@
     <div class="controls">
       <button id="changePlan" class="btn">Change plan</button>
       <button id="ideaBfast" class="btn">🎲 Breakfast idea</button>
-  <button id="ideaMeal" class="btn">🎲 Lunch/Dinner idea</button>
-  <details>
-    <summary><strong>Settings</strong></summary>
+      <button id="ideaMeal" class="btn">🎲 Lunch/Dinner idea</button>
+
       <details>
-        <div class="setting">
-  <label>Custom breakfast ideas (one per line)</label>
-  <textarea id="customBreakfasts" rows="4" style="width:100%;padding:8px;border-radius:10px;background:#0e1a2a;border:1px solid rgba(255,255,255,.1);color:var(--text)"></textarea>
-</div>
-<div class="setting">
-  <label>Custom lunch/dinner ideas (one per line)</label>
-  <textarea id="customMeals" rows="6" style="width:100%;padding:8px;border-radius:10px;background:#0e1a2a;border:1px solid rgba(255,255,255,.1);color:var(--text)"></textarea>
-  <small class="desc">Leave blank to use the default list. Your lists are saved on this device.</small>
-</div>
         <summary><strong>Settings</strong></summary>
         <div class="settings">
+          <!-- Meal ideas (custom) -->
+          <div class="setting">
+            <label>Custom breakfast ideas (one per line)</label>
+            <textarea id="customBreakfasts" rows="4" style="width:100%;padding:8px;border-radius:10px;background:#0e1a2a;border:1px solid rgba(255,255,255,.1);color:var(--text)"></textarea>
+          </div>
+          <div class="setting">
+            <label>Custom lunch/dinner ideas (one per line)</label>
+            <textarea id="customMeals" rows="6" style="width:100%;padding:8px;border-radius:10px;background:#0e1a2a;border:1px solid rgba(255,255,255,.1);color:var(--text)"></textarea>
+            <small class="desc">Leave blank to use the default list. Your lists are saved on this device.</small>
+          </div>
+
+          <!-- Existing settings -->
           <div class="setting">
             <label>Body weight</label>
             <div class="radio">
@@ -114,8 +116,15 @@
     </div>
   </div>
 </header>
+
 <main id="app"></main>
-<footer><div class="footerWrap"><span id="plannedTotals">Planned total: —</span><span>Data stays on this device.</span></div></footer>
+
+<footer>
+  <div class="footerWrap">
+    <span id="plannedTotals">Planned total: —</span>
+    <span>Data stays on this device.</span>
+  </div>
+</footer>
 
 <!-- Plan chooser -->
 <div id="chooser" class="overlay">
@@ -128,8 +137,25 @@
   </div>
 </div>
 
+<!-- Idea modal (moved ABOVE the script so JS can bind) -->
+<div id="ideaModal" class="overlay" style="display:none">
+  <div class="modal">
+    <div class="topbar">
+      <h2 style="margin:0 8px">Meal idea</h2>
+      <button id="ideaClose" class="closeX" aria-label="Close">✕</button>
+    </div>
+    <div style="padding:8px 8px 0">
+      <p id="ideaText" style="font-size:1.1rem;margin:8px 0 12px"></p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="ideaAnother" class="btn">Another</button>
+        <button id="ideaCopy" class="btn">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-// Register SW if present (optional – no change required here)
+// Register SW if present (optional)
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
 
 // Helpers
@@ -176,6 +202,7 @@ function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 // DOM refs
 const app=document.getElementById('app'), chooser=document.getElementById('chooser'), planGrid=document.getElementById('planGrid'), presetNameEl=document.getElementById('presetName');
 
+// Open/close
 document.getElementById('changePlan').onclick=()=> openChooser(false);
 document.getElementById('xClose').onclick=()=> closeChooser();
 
@@ -272,13 +299,13 @@ function wireSettings(){
   for(const r of document.querySelectorAll('input[name="wtUnit"]')){ r.checked=(r.value===state.wtUnit); r.onchange=()=>{ state.wtUnit=r.value; save(); render(); }; }
   const factor=document.getElementById('kcalPerKgKm'); factor.value=state.kcalPerKgKm; factor.oninput=()=>{ state.kcalPerKgKm=parseFloat(factor.value)||1.0; save(); updatePlanned(); updateTotals(); };
   document.getElementById('resetBtn').onclick=()=>{ if(confirm('Reset all progress?')){ state.sessions={}; save(); render(); } };
-   wireMealIdeaSettings();
+  wireMealIdeaSettings();
 }
 
 // Save helper
 function saveUpdate(){ save(); updateTotals(); }
 
-  // Default lists (you can tweak; user lists override these)
+// Default meal lists (your picks)
 const DEFAULT_BREAKFASTS = [
   "Oatmeal + fruit",
   "Eggs & potato hash + fruit",
@@ -306,50 +333,41 @@ function mergedList(defaults, key) {
 }
 function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
 
-// --- Idea modal wiring ---
+// Idea modal wiring
 const ideaModal = document.getElementById("ideaModal");
 const ideaText  = document.getElementById("ideaText");
 
 function openIdea(kind) {
-  // Merge defaults with any saved custom lists
   const breakfasts = mergedList(DEFAULT_BREAKFASTS, "meal-custom-breakfasts");
   const meals      = mergedList(DEFAULT_MEALS, "meal-custom-meals");
   const pool = (kind === "breakfast") ? breakfasts : meals;
   ideaText.textContent = pick(pool);
   ideaModal.style.display = "flex";
   document.body.classList.add("hasOverlay");
-  // Store last kind for "Another"
   ideaModal.dataset.kind = kind;
 }
-
 function closeIdea() {
   ideaModal.style.display = "none";
   document.body.classList.remove("hasOverlay");
 }
-
 document.getElementById("ideaBfast").addEventListener("click", () => openIdea("breakfast"));
 document.getElementById("ideaMeal").addEventListener("click",  () => openIdea("meal"));
-
 document.getElementById("ideaClose").addEventListener("click", closeIdea);
 ideaModal.addEventListener("click", (e) => { if (e.target === ideaModal) closeIdea(); });
-
 document.getElementById("ideaAnother").addEventListener("click", () => {
   const kind = ideaModal.dataset.kind || "meal";
   openIdea(kind);
 });
-
 document.getElementById("ideaCopy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(ideaText.textContent); } catch {}
 });
 
-// --- Save/load custom lists from Settings ---
+// Save/load custom lists
 function wireMealIdeaSettings() {
   const bEl = document.getElementById("customBreakfasts");
   const mEl = document.getElementById("customMeals");
-  // load
   bEl.value = localStorage.getItem("meal-custom-breakfasts") || "";
   mEl.value = localStorage.getItem("meal-custom-meals") || "";
-  // save
   const saveLists = () => {
     localStorage.setItem("meal-custom-breakfasts", bEl.value.trim());
     localStorage.setItem("meal-custom-meals", mEl.value.trim());
@@ -357,24 +375,9 @@ function wireMealIdeaSettings() {
   bEl.addEventListener("input", saveLists);
   mEl.addEventListener("input", saveLists);
 }
-  
+
 // Boot
 render();
 </script>
-<div id="ideaModal" class="overlay" style="display:none">
-  <div class="modal">
-    <div class="topbar">
-      <h2 style="margin:0 8px">Meal idea</h2>
-      <button id="ideaClose" class="closeX" aria-label="Close">✕</button>
-    </div>
-    <div style="padding:8px 8px 0">
-      <p id="ideaText" style="font-size:1.1rem;margin:8px 0 12px"></p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="ideaAnother" class="btn">Another</button>
-        <button id="ideaCopy" class="btn">Copy</button>
-      </div>
-    </div>
-  </div>
-</div>
 </body>
 </html>
